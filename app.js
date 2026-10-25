@@ -144,6 +144,8 @@ function getCortexSupabaseConfig() {
 }
 
 async function initAuth() {
+  document.getElementById('auth-name').required = false;
+  document.getElementById('auth-confirm').required = false;
   const cfg = getCortexSupabaseConfig();
   if (!cfg || !window.supabase?.createClient) {
     cortexAuthReady = false;
