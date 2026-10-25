@@ -46,28 +46,28 @@
       <form id="auth-form" onsubmit="handleAuth(event)">
         <div id="name-field" class="form-group" style="display:none;">
           <label>Full Name</label>
-          <input type="text" id="auth-name" placeholder="Michael Ujuku Morim" required>
+          <input type="text" id="auth-name" placeholder="Michael Ujuku Morim" autocomplete="name">
         </div>
         <div class="form-group">
           <label>Email</label>
-          <input type="email" id="auth-email" placeholder="cortexnexus@proton.me" required>
+          <input type="email" id="auth-email" placeholder="cortexnexus@proton.me" required autocomplete="email">
         </div>
         <div class="form-group">
           <label>Password</label>
-          <input type="password" id="auth-password" placeholder="••••••••" required minlength="8">
+          <input type="password" id="auth-password" placeholder="••••••••" required minlength="8" autocomplete="current-password">
         </div>
         <div id="confirm-field" class="form-group" style="display:none;">
           <label>Confirm Password</label>
-          <input type="password" id="auth-confirm" placeholder="••••••••">
+          <input type="password" id="auth-confirm" placeholder="••••••••" autocomplete="new-password">
         </div>
         <button type="submit" class="btn-primary btn-full" id="auth-btn">Sign In</button>
       </form>
+      <p id="auth-message" role="status" aria-live="polite" style="display:none;margin:12px 0;color:#fca5a5;font-size:0.9rem;"></p>
       <p class="auth-toggle">
         <span id="auth-toggle-text">No account?</span>
         <button onclick="toggleAuthMode()" class="link-btn" id="auth-toggle-btn">Create one</button>
       </p>
-      <div class="auth-divider"><span>or</span></div>
-      <button class="btn-secondary btn-full" onclick="guestAccess()">Continue as Guest</button>
+      <p class="auth-subtitle" style="margin-top:16px;">Secure member access · email verification may be required</p>
     </div>
   </div>
 
@@ -1040,6 +1040,7 @@
     </footer>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>
