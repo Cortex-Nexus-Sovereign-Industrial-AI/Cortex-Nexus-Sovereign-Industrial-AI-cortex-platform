@@ -67,7 +67,7 @@
         <button onclick="toggleAuthMode()" class="link-btn" id="auth-toggle-btn">Create one</button>
       </p>
       <div class="auth-divider"><span>or</span></div>
-      <button class="btn-secondary btn-full" onclick="guestAccess()">Continue as Guest</button>
+      <button class="btn-secondary btn-full" onclick="guestAccess()">Guest access unavailable</button>\n      <p id="auth-status" class="auth-subtitle" role="status" aria-live="polite"></p>
     </div>
   </div>
 
@@ -1040,6 +1040,6 @@
     </footer>
   </div>
 
-  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n  <script src="supabase-config.js"></script>\n  <script src="app.js"></script>
 </body>
 </html>
