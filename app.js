@@ -7,6 +7,9 @@
 // ============================================
 // STATE MANAGEMENT
 // ============================================
+let cortexSupabaseClient = null;
+let cortexAuthReady = false;
+
 const CortexState = {
   user: null,
   isAuth: false,
@@ -125,37 +128,109 @@ const CONTENT_TEMPLATES = {
 // ============================================
 // AUTHENTICATION
 // ============================================
-function initAuth() {
-  const savedUser = localStorage.getItem('cortex_user');
-  if (savedUser) {
-    CortexState.user = JSON.parse(savedUser);
-    CortexState.isAuth = true;
-    showApp();
+function authMessage(message) {
+  const el = document.getElementById('auth-status');
+  if (el) el.textContent = message;
+}
+
+function getCortexSupabaseConfig() {
+  const cfg = window.CORTEX_SUPABASE_CONFIG;
+  if (!cfg || typeof cfg.url !== 'string' || typeof cfg.anonKey !== 'string' ||
+      !cfg.url.startsWith('https://') || !cfg.anonKey ||
+      cfg.url.includes('YOUR_PROJECT_REF') || cfg.anonKey.includes('YOUR_SUPABASE_ANON_KEY')) {
+    return null;
+  }
+  return cfg;
+}
+
+async function initAuth() {
+  document.getElementById('auth-name').required = false;
+  document.getElementById('auth-confirm').required = false;
+  const cfg = getCortexSupabaseConfig();
+  if (!cfg || !window.supabase?.createClient) {
+    cortexAuthReady = false;
+    authMessage('Secure sign-in is not configured yet. Add the Supabase project URL and public anon key in supabase-config.js.');
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('auth-overlay').style.display = 'flex';
+    return;
+  }
+
+  try {
+    cortexSupabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    });
+    const { data, error } = await cortexSupabaseClient.auth.getSession();
+    if (error) throw error;
+    cortexAuthReady = true;
+    applySupabaseSession(data.session);
+    cortexSupabaseClient.auth.onAuthStateChange((_event, session) => applySupabaseSession(session));
+  } catch (err) {
+    cortexAuthReady = false;
+    authMessage('Unable to initialize secure sign-in. Check the Supabase URL/key and project settings.');
+    console.error('Cortex auth initialization failed:', err?.message || 'unknown error');
   }
 }
 
-function handleAuth(e) {
-  e.preventDefault();
-  const isSignUp = document.getElementById('auth-title').textContent === 'Create Account';
-  const email = document.getElementById('auth-email').value;
-  const password = document.getElementById('auth-password').value;
-
-  if (isSignUp) {
-    const name = document.getElementById('auth-name').value;
-    const confirm = document.getElementById('auth-confirm').value;
-    if (password !== confirm) {
-      alert('Passwords do not match!');
-      return;
-    }
-    CortexState.user = { name, email, created: new Date().toISOString() };
+function applySupabaseSession(session) {
+  if (session?.user) {
+    const user = session.user;
+    CortexState.user = {
+      id: user.id,
+      name: user.user_metadata?.full_name || user.email || 'Cortex Member',
+      email: user.email || ''
+    };
+    CortexState.isAuth = true;
+    showApp();
+    authMessage('');
   } else {
-    CortexState.user = { name: 'Michael Ujuku Morim', email, created: new Date().toISOString() };
+    CortexState.user = null;
+    CortexState.isAuth = false;
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('auth-overlay').style.display = 'flex';
+  }
+}
+
+async function handleAuth(e) {
+  e.preventDefault();
+  if (!cortexAuthReady || !cortexSupabaseClient) {
+    authMessage('Secure sign-in is not configured. Contact the site administrator.');
+    return;
   }
 
-  localStorage.setItem('cortex_user', JSON.stringify(CortexState.user));
-  CortexState.isAuth = true;
-  showApp();
-  addLog('User authenticated — ' + CortexState.user.email, 'success');
+  const isSignUp = document.getElementById('auth-title').textContent === 'Create Account';
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const button = document.getElementById('auth-btn');
+  button.disabled = true;
+  authMessage(isSignUp ? 'Creating your account…' : 'Signing in securely…');
+
+  try {
+    let result;
+    if (isSignUp) {
+      const name = document.getElementById('auth-name').value.trim();
+      const confirm = document.getElementById('auth-confirm').value;
+      if (password !== confirm) throw new Error('Passwords do not match.');
+      result = await cortexSupabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } }
+      });
+      if (result.error) throw result.error;
+      if (result.data.session) {
+        authMessage('Account created successfully.');
+      } else {
+        authMessage('Account created. Check your email to confirm it before signing in.');
+      }
+    } else {
+      result = await cortexSupabaseClient.auth.signInWithPassword({ email, password });
+      if (result.error) throw result.error;
+      authMessage('Signed in successfully.');
+    }
+  } catch (err) {
+    authMessage(err?.message || 'Authentication failed. Please try again.');
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function toggleAuthMode() {
@@ -166,13 +241,13 @@ function toggleAuthMode() {
   document.getElementById('auth-toggle-btn').textContent = isSignUp ? 'Sign in' : 'Create one';
   document.getElementById('name-field').style.display = isSignUp ? 'block' : 'none';
   document.getElementById('confirm-field').style.display = isSignUp ? 'block' : 'none';
+  document.getElementById('auth-name').required = isSignUp;
+  document.getElementById('auth-confirm').required = isSignUp;
+  authMessage('');
 }
 
 function guestAccess() {
-  CortexState.user = { name: 'Guest', email: 'guest@cortex.local', isGuest: true };
-  CortexState.isAuth = true;
-  showApp();
-  addLog('Guest access granted — limited features', 'warn');
+  authMessage('Guest bypass is disabled. Configure Supabase authentication to continue.');
 }
 
 function showApp() {
@@ -187,11 +262,20 @@ function showApp() {
   addLog('Platform session initialized', 'success');
 }
 
-function signOut() {
-  localStorage.removeItem('cortex_user');
+async function signOut() {
+  if (!cortexSupabaseClient) {
+    authMessage('Secure sign-out is unavailable because authentication is not configured.');
+    return;
+  }
+  const { error } = await cortexSupabaseClient.auth.signOut();
+  if (error) {
+    showToast('Unable to sign out. Please try again.');
+    return;
+  }
   CortexState.user = null;
   CortexState.isAuth = false;
-  location.reload();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-overlay').style.display = 'flex';
 }
 
 // ============================================
@@ -588,7 +672,7 @@ function saveSettings() {
   const location = document.getElementById('settings-location').value;
 
   CortexState.user = { ...CortexState.user, name, email, company, location };
-  localStorage.setItem('cortex_user', JSON.stringify(CortexState.user));
+  // Profile preferences remain local UI state; identity/session is managed by Supabase.
 
   document.getElementById('user-name').textContent = name.split(' ')[0];
   document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
